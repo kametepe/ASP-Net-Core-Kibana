@@ -9,6 +9,10 @@ using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Events;
+using Serilog.Sinks.Elasticsearch;
 
 namespace asp.net.kibana
 {
@@ -16,6 +20,17 @@ namespace asp.net.kibana
     {
         public Startup(IConfiguration configuration)
         {
+            // /create Serilog Elasticsearch logger
+            Log.Logger = new LoggerConfiguration()
+                            .Enrich.FromLogContext()
+                            .MinimumLevel.Debug()
+                            .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri("http://localhost:9200"))
+                            {
+                                MinimumLogEventLevel = LogEventLevel.Verbose,
+                                AutoRegisterTemplate = true
+                            })
+                            .CreateLogger();
+
             Configuration = configuration;
         }
 
@@ -31,12 +46,12 @@ namespace asp.net.kibana
                 options.MinimumSameSitePolicy = SameSiteMode.None;
             });
 
-
+            services.AddLogging(loggingBuilder => loggingBuilder.AddSerilog(dispose: true));
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_1);
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
         {
             if (env.IsDevelopment())
             {
@@ -47,7 +62,10 @@ namespace asp.net.kibana
                 app.UseExceptionHandler("/Home/Error");
                 app.UseHsts();
             }
-
+           
+           loggerFactory.AddConsole(Configuration.GetSection("Logging"));
+           loggerFactory.AddDebug();
+           
             app.UseHttpsRedirection();
             app.UseStaticFiles();
             app.UseCookiePolicy();
